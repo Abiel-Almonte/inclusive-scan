@@ -1,7 +1,8 @@
 #include <iostream>
+#include <stdint.h>
 #include <cuda_runtime.h>
 
-extern "C" __global__ void block_wide_prefix_sum_naive(float* A, uint32_t n);
+extern "C" void launch_block_wide_prefix_sum_naive(float* A, uint32_t n, size_t bytes);
 
 constexpr uint32_t BLOCK_SIZE= 64;
 
@@ -22,23 +23,13 @@ int main(int argc, char** argv){
     for (int i = 0; i < size; i++){
         A[i]= static_cast<float>(i);
     }
-
-    float* A_device;
-    cudaMalloc(&A_device, alloc_size_bytes);
-    cudaMemcpy(A_device, A, alloc_size_bytes, cudaMemcpyHostToDevice);
-
-    block_wide_prefix_sum_naive<<1, BLOCK_SIZE>>(A_device, size);
-    cudaDeviceSynchronize();
-
-    cudaMemcpy(A, A_device, alloc_size_bytes, cudaMemcpyDeviceToHost);
+    
+    launch_block_wide_prefix_sum_naive(A, size, alloc_size_bytes);
 
     for (int i = 0; i < size; i++){
         std::cout << A[i] << " ";
     }
     std::cout << std::endl;
-
-    cudaFree(A_device);
-    free(A);
 
     return 0;
 }

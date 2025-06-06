@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(hpps)
+enable_language(CUDA)
+set(CMAKE_CUDA_ARCHITECTURES 89)
 
 add_executable(${PROJECT_NAME} 
     main.cpp
@@ -13,8 +15,4 @@ add_executable(${PROJECT_NAME}
 
 target_compile_options(${PROJECT_NAME} PRIVATE 
     -O3 -march=native -ffast-math
-    --cuda-gpu-arch=sm_89
 )
-
-target_link_directories(${PROJECT_NAME} PRIVATE /usr/local/cuda/lib64)
-target_link_libraries(${PROJECT_NAME} PRIVATE cudart cuda)
