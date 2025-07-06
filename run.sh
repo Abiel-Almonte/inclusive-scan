@@ -1,11 +1,9 @@
 #!/bin/bash
-
 set -e -x
 
 mkdir -p build
 
-CC=clang-17 CXX=clang++-17 cmake -S . -B build -DCMAKE_CUDA_COMPILER=clang++-17
-
+CXX=clang++-17 CUDACXX=nvcc cmake -S . -B build -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
 cmake --build build
 
-./build/hpps ${@}
+./build/hpps "$@"
