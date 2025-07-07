@@ -41,9 +41,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     
     extern __shared__ float warp_sums[];
 
-    if (active_lanes > 0) {
         x = ks_warp_scan(x, mask, lane, active_lanes, wid, warp_sums);
-    }
     __syncthreads();
 
     blelloch_cross_warp_upsweep(tid, n_warps, warp_sums);
