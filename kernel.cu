@@ -3,9 +3,7 @@
 
 __device__ float block_status[MAXBLOCKS];
 __device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint32_t lane, uint32_t active_lanes, uint32_t wid, float warp_offsets[]);
-__device__ __forceinline__ float make_warp_scan_exclusive(float inclusive_sum, uint32_t mask, uint32_t lane);
-__device__ __forceinline__ void blelloch_cross_warp_upsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]);
-__device__ __forceinline__ void blelloch_cross_warp_downsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]);
+__device__ __forceinline__ void blelloch_shmem_scan(uint32_t tid, uint32_t n_warps, float warp_sums[]);
 __device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_prefix_sum);
 __device__ __forceinline__ float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum);
 // flag << value;
@@ -53,15 +51,8 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
 
     x = ks_warp_scan(x, mask, lane, active_lanes, wid, warp_sums);
     __syncthreads();
+    blelloch_shmem_scan(tid, n_warps, warp_sums);
 
-    blelloch_cross_warp_upsweep(tid, n_warps, warp_sums);
-
-    if (tid == 0) {
-        warp_sums[n_warps - 1] = 0.0f;
-    }
-    __syncthreads();
-
-    blelloch_cross_warp_downsweep(tid, n_warps, warp_sums);
     x += warp_sums[wid];
 
     __shared__ float block_prefix_sum;
@@ -110,7 +101,7 @@ __device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint3
     return parent;
 }
 
-__device__ __forceinline__ void blelloch_cross_warp_upsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]) {
+__device__ __forceinline__ void blelloch_shmem_scan(uint32_t tid, uint32_t n_warps, float warp_sums[]) {
     uint32_t tree_index = tid + 1;
 
 #pragma unroll 1
@@ -121,10 +112,11 @@ __device__ __forceinline__ void blelloch_cross_warp_upsweep(uint32_t tid, uint32
         }
         __syncthreads();
     }
-}
 
-__device__ __forceinline__ void blelloch_cross_warp_downsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]) {
-    uint32_t tree_index = tid + 1;
+    if (tid == 0) {
+        warp_sums[n_warps - 1] = 0.0f;
+    }
+    __syncthreads();
 
 #pragma unroll 1
     for (int delta = n_warps >> 1; delta >= 1; delta >>= 1) {
@@ -138,6 +130,7 @@ __device__ __forceinline__ void blelloch_cross_warp_downsweep(uint32_t tid, uint
         }
         __syncthreads();
     }
+
 }
 
 __device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_prefix_sum) {
