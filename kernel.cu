@@ -2,7 +2,7 @@
 #include "config.h"
 
 __device__ float block_status[MAXBLOCKS];
-__device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint32_t lane, uint32_t active_lanes);
+__device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint32_t lane, uint32_t active_lanes, uint32_t wid, float warp_offsets[]);
 __device__ __forceinline__ float make_warp_scan_exclusive(float inclusive_sum, uint32_t mask, uint32_t lane);
 __device__ __forceinline__ void blelloch_cross_warp_upsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]);
 __device__ __forceinline__ void blelloch_cross_warp_downsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]);
@@ -38,19 +38,11 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
 
     float x = (gid < N && active_lanes > 0) ? A[gid] : 0.0f;
     float original_x = x;
+    
+    extern __shared__ float warp_sums[];
 
     if (active_lanes > 0) {
-        x = ks_warp_scan(x, mask, lane, active_lanes);
-    }
-
-    __shared__ float warp_sums[32];
-    if (tid < n_warps) {
-        warp_sums[tid] = 0.0f;
-    }
-    __syncthreads();
-
-    if (active_lanes > 0 && lane == active_lanes - 1) {
-        warp_sums[wid] = x;
+        x = ks_warp_scan(x, mask, lane, active_lanes, wid, warp_sums);
     }
     __syncthreads();
 
@@ -63,11 +55,8 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
 
     blelloch_cross_warp_downsweep(tid, n_warps, warp_sums);
 
-    if (active_lanes > 0) {
-        x = make_warp_scan_exclusive(x, mask, lane);
-        if (wid > 0) {
-            x += warp_sums[wid];
-        }
+    if (wid > 0) {
+        x += warp_sums[wid];
     }
 
     __shared__ float block_prefix_sum;
@@ -95,7 +84,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     }
 }
 
-__device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint32_t lane, uint32_t active_lanes) {
+__device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint32_t lane, uint32_t active_lanes, uint32_t wid, float warp_offsets[]) {
 #pragma unroll 1
     for (int delta = 1; delta < active_lanes; delta <<= 1) {
         float child = __shfl_up_sync(mask, parent, delta);
@@ -103,15 +92,17 @@ __device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint3
             parent += child;
         }
     }
-    return parent;
-}
 
-__device__ __forceinline__ float make_warp_scan_exclusive(float inclusive_sum, uint32_t mask, uint32_t lane) {
-    float exclusive = __shfl_up_sync(mask, inclusive_sum, 1);
-    if (lane == 0) {
-        exclusive = 0.0f;
+    if (lane == active_lanes - 1){
+        warp_offsets[wid] = parent;
     }
-    return exclusive;
+
+    parent = __shfl_up_sync(mask, parent, 1);
+    if (lane == 0){
+        parent = 0.0f;
+    }
+
+    return parent;
 }
 
 __device__ __forceinline__ void blelloch_cross_warp_upsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]) {
