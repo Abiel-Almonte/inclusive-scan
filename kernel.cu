@@ -19,8 +19,8 @@ __device__ __forceinline__ float parallel_lookback(uint32_t tid, uint32_t lane, 
  */
 extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     uint32_t tid = threadIdx.x;
-    uint16_t bid = blockDim.x;
-    uint32_t gid = blockIdx.x * bid + tid;
+    uint16_t bdim = blockDim.x;
+    uint32_t gid = blockIdx.x * bdim + tid;
 
     if (tid == 0) {
         block_status[blockIdx.x] = NAN; // invalid
@@ -29,9 +29,9 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
 
     uint32_t wid = tid / WARPSIZE;
     uint32_t lane = tid % WARPSIZE;
-    uint32_t n_warps = (bid + WARPSIZE - 1) / WARPSIZE;
+    uint32_t n_warps = (bdim + WARPSIZE - 1) / WARPSIZE;
 
-    uint32_t remaining = N - blockIdx.x * bid;
+    uint32_t remaining = N - blockIdx.x * bdim;
     uint32_t active_lanes =
         (remaining > wid * WARPSIZE) ? ((remaining >= WARPSIZE) ? WARPSIZE : remaining - wid * WARPSIZE) : 0;
 
@@ -56,7 +56,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     x += warp_sums[wid];
 
     __shared__ float block_prefix_sum;
-    if (tid == bid - 1) {
+    if (tid == bdim - 1) {
         block_prefix_sum = x + original_x;
 
         if (blockIdx.x == 0) {
