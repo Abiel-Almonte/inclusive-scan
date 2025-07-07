@@ -51,19 +51,14 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
 
     x = ks_warp_scan(x, mask, lane, active_lanes, wid, warp_sums);
     __syncthreads();
-    blelloch_shmem_scan(tid, n_warps, warp_sums);
 
+    blelloch_shmem_scan(tid, n_warps, warp_sums);
     x += warp_sums[wid];
 
     __shared__ float block_prefix_sum;
     if (tid == bdim - 1) {
         block_prefix_sum = x + original_x;
-
-        if (blockIdx.x == 0) {
-            block_status[0] = block_prefix_sum;
-        } else {
-            block_status[blockIdx.x] = -block_prefix_sum; // aggregate
-        }
+        block_status[blockIdx.x] = -block_prefix_sum;
     }
     __syncthreads();
 
