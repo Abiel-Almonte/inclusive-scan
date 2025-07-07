@@ -41,7 +41,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     
     extern __shared__ float warp_sums[];
 
-        x = ks_warp_scan(x, mask, lane, active_lanes, wid, warp_sums);
+    x = ks_warp_scan(x, mask, lane, active_lanes, wid, warp_sums);
     __syncthreads();
 
     blelloch_cross_warp_upsweep(tid, n_warps, warp_sums);
@@ -52,7 +52,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     __syncthreads();
 
     blelloch_cross_warp_downsweep(tid, n_warps, warp_sums);
-        x += warp_sums[wid];
+    x += warp_sums[wid];
 
     __shared__ float block_prefix_sum;
     if (tid == blockDim.x - 1) {
@@ -159,6 +159,6 @@ __device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_p
 }
 
 __device__ __forceinline__ float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum){
-    
+    return 0.0f;
 }
 
