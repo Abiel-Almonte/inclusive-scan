@@ -34,7 +34,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     uint32_t active_lanes =
         (remaining > wid * WARPSIZE) ? ((remaining >= WARPSIZE) ? WARPSIZE : remaining - wid * WARPSIZE) : 0;
 
-    uint32_t mask = (active_lanes == 32) ? FULLMASK : (active_lanes > 0) ? (1u << active_lanes) - 1u : 0;
+    uint32_t mask = (active_lanes > 0) ? (1u << active_lanes) - 1u : 0;
 
     float x = (gid < N && active_lanes > 0) ? A[gid] : 0.0f;
     float original_x = x;
