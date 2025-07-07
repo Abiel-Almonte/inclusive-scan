@@ -52,10 +52,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     __syncthreads();
 
     blelloch_cross_warp_downsweep(tid, n_warps, warp_sums);
-
-    if (wid > 0) {
         x += warp_sums[wid];
-    }
 
     __shared__ float block_prefix_sum;
     if (tid == blockDim.x - 1) {
