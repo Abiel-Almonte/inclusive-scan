@@ -7,6 +7,8 @@ __device__ __forceinline__ float make_warp_scan_exclusive(float inclusive_sum, u
 __device__ __forceinline__ void blelloch_cross_warp_upsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]);
 __device__ __forceinline__ void blelloch_cross_warp_downsweep(uint32_t tid, uint32_t n_warps, float warp_sums[]);
 __device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_prefix_sum);
+__device__ __forceinline__ float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum);
+// flag << value;
 
 /*
  * Single pass device wide parallel prefix sum
@@ -152,18 +154,25 @@ __device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_p
         float accumulation = 0.0f;
 #pragma unroll 1
         for (int prev = blockIdx.x - 1; prev >= 0; prev--) {
-            while (isnan(block_status[prev])) { /* wait */
+            while (isnan(block_status[prev])) { 
+                /* wait */
             }
             if (block_status[prev] < 0.0f) {
                 accumulation -= block_status[prev];
             } else {
-                block_offset = block_status[prev] + accumulation;
+                accumulation += block_status[prev] ;
                 break;
             }
         }
+        block_offset = accumulation;
         block_status[blockIdx.x] = block_offset + block_prefix_sum; // prefix
         __threadfence();
     }
 
     return block_offset;
 }
+
+__device__ __forceinline__ float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum){
+    
+}
+
