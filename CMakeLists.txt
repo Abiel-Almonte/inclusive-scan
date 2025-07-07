@@ -7,9 +7,10 @@ enable_language(CUDA)
 set(CMAKE_CUDA_ARCHITECTURES 89)
 
 add_executable(${PROJECT_NAME}
-    main.cpp
-    prefix_sum.cu
-    public_cuda.cu
+    test.cpp
+    kernel.cu
+    benchmark.cu
+    config.h
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -20,7 +21,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-O3 -march=native -ffast-math>
-    $<$<COMPILE_LANGUAGE:CUDA>:--use_fast_math -O3>
+    $<$<COMPILE_LANGUAGE:CUDA>:-ffast-math -O3>
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
