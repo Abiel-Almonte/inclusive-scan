@@ -32,12 +32,21 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     uint32_t n_warps = (bdim + WARPSIZE - 1) / WARPSIZE;
 
     uint32_t remaining = N - blockIdx.x * bdim;
-    uint32_t active_lanes =
-        (remaining > wid * WARPSIZE) ? ((remaining >= WARPSIZE) ? WARPSIZE : remaining - wid * WARPSIZE) : 0;
+    uint32_t active_lanes;
 
+    if (remaining > wid*WARPSIZE){
+        if(remaining >= WARPSIZE){
+            active_lanes = WARPSIZE;
+        }else{
+            active_lanes = remaining - wid*WARPSIZE;
+        }
+    }else{
+        active_lanes = 0;
+    }
+    
     uint32_t mask = (1u << active_lanes) - 1u;
 
-    float x = (gid < N && active_lanes > 0) ? A[gid] : 0.0f;
+    float x = (gid < N) ? __ldg(&A[gid]) : 0.0f;
     float original_x = x;
     
     extern __shared__ float warp_sums[];
@@ -75,7 +84,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     }
     __syncthreads();
 
-    if (gid < N && active_lanes > 0) {
+    if (gid < N) {
         B[gid] = x + shared_block_offset;
     }
 }
@@ -105,12 +114,10 @@ __device__ __forceinline__ void blelloch_cross_warp_upsweep(uint32_t tid, uint32
     uint32_t tree_index = tid + 1;
 
 #pragma unroll 1
-    for (int delta = 1; delta <= n_warps / 2; delta <<= 1) {
-        if (tid < n_warps) {
-            uint32_t parent = tree_index * 2 * delta - 1;
-            if (parent < n_warps) {
-                warp_sums[parent] += warp_sums[parent - delta];
-            }
+    for (int delta = 1; delta <  n_warps ; delta <<= 1) {
+        uint32_t parent = tree_index * 2 * delta - 1;
+        if (parent < n_warps) {
+            warp_sums[parent] += warp_sums[parent - delta];
         }
         __syncthreads();
     }
@@ -121,14 +128,13 @@ __device__ __forceinline__ void blelloch_cross_warp_downsweep(uint32_t tid, uint
 
 #pragma unroll 1
     for (int delta = n_warps >> 1; delta >= 1; delta >>= 1) {
-        if (tid < n_warps) {
-            uint32_t parent = tree_index * 2 * delta - 1;
-            if (parent < n_warps) {
-                uint32_t child = parent - delta;
-                float temp = warp_sums[parent];
-                warp_sums[parent] += warp_sums[child];
-                warp_sums[child] = temp;
-            }
+        uint32_t parent = tree_index * 2 * delta - 1;
+        if (parent < n_warps) {
+            uint32_t child = parent - delta;
+            
+            float temp = warp_sums[parent];
+            warp_sums[parent] += warp_sums[child];
+            warp_sums[child] = temp;
         }
         __syncthreads();
     }
