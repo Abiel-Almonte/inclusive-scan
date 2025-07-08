@@ -2,10 +2,10 @@
 #include "config.h"
 
 __device__ float block_status[MAXBLOCKS];
-__device__ inline float ks_block_scan(float x, uint32_t wid, uint32_t lane, uint32_t n_warps, uint32_t n_lanes, uint32_t mask);
+__device__ inline float
+ks_block_scan(float x, uint32_t wid, uint32_t lane, uint32_t n_warps, uint32_t n_lanes, uint32_t mask);
 __device__ inline float sequential_lookback(uint32_t tid, float block_prefix_sum);
 __device__ inline float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum);
-
 
 /*
  * Single pass device wide parallel inclusive scan
@@ -26,22 +26,22 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     uint32_t wid = tid / WARPSIZE;
     uint32_t lane = tid % WARPSIZE;
     uint32_t n_warps = (bdim + WARPSIZE - 1) / WARPSIZE;
-    uint32_t remaining = N  - bdim * blockIdx.x;
+    uint32_t remaining = N - bdim * blockIdx.x;
     uint32_t n_lanes;
 
-    if (remaining < wid*WARPSIZE){
-        n_lanes = 0;
-    }else{
-        if (remaining - wid*WARPSIZE < WARPSIZE){
-            n_lanes = remaining - wid*WARPSIZE;
-        }else{
+    if (remaining >= wid * WARPSIZE) {
+        if (remaining - wid * WARPSIZE > WARPSIZE) {
             n_lanes = WARPSIZE;
+        } else {
+            n_lanes = remaining - wid * WARPSIZE;
         }
+    } else {
+        n_lanes = 0;
     }
 
     uint32_t mask = (1u << n_lanes) - 1u;
-  
-    float x = (gid < N)? __ldg(&A[gid]) : 0.0f;
+
+    float x = (gid < N) ? __ldg(&A[gid]) : 0.0f;
     x = ks_block_scan(x, wid, lane, n_warps, n_lanes, mask);
 
     __shared__ float block_prefix_sum;
@@ -62,14 +62,14 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     }
     __syncthreads();
 
-    if (gid < N){
+    if (gid < N) {
         B[gid] = x + shared_block_offset;
     }
 }
 
-__device__ inline float ks_block_scan(float x, uint32_t wid, uint32_t lane, uint32_t n_warps, uint32_t n_lanes, uint32_t mask) {
+__device__ inline float
+ks_block_scan(float x, uint32_t wid, uint32_t lane, uint32_t n_warps, uint32_t n_lanes, uint32_t mask) {
     __shared__ float warp_sums[WARPSIZE];
-
 
 #pragma unroll 1
     for (int delta = 1; delta < n_lanes; delta <<= 1) {
