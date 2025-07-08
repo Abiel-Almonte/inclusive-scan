@@ -48,3 +48,35 @@ __global__ void blelloch_scan(float* arr, float* out, uint32_t n){
         out[gid] = scratch[tid];
     }
 }
+
+__device__ inline void blelloch_shmem_scan(uint32_t tid, uint32_t n_warps, float warp_sums[]) {
+    uint32_t tree_index = tid + 1;
+
+#pragma unroll 1
+    for (int delta = 1; delta <  n_warps ; delta <<= 1) {
+        uint32_t parent = tree_index * 2 * delta - 1;
+        if (parent < n_warps) {
+            warp_sums[parent] += warp_sums[parent - delta];
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        warp_sums[n_warps - 1] = 0.0f;
+    }
+    __syncthreads();
+
+#pragma unroll 1
+    for (int delta = n_warps >> 1; delta >= 1; delta >>= 1) {
+        uint32_t parent = tree_index * 2 * delta - 1;
+        if (parent < n_warps) {
+            uint32_t child = parent - delta;
+            
+            float temp = warp_sums[parent];
+            warp_sums[parent] += warp_sums[child];
+            warp_sums[child] = temp;
+        }
+        __syncthreads();
+    }
+
+}
