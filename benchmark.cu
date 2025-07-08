@@ -57,7 +57,7 @@ void compare_with_cub(float* h_input, uint32_t n, int reps) {
 
     for (int i = 0; i < reps; i++) {
         CHECK_CUDA(cudaEventRecord(start));
-        cub::DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes, d_input, d_output_cub, n);
+        cub::DeviceScan::InclusiveSum(d_temp_storage, temp_storage_bytes, d_input, d_output_cub, n);
         CHECK_CUDA(cudaEventRecord(stop));
         CHECK_CUDA(cudaEventSynchronize(stop));
         float elapsed;
