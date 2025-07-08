@@ -4,7 +4,7 @@
 __device__ float block_status[MAXBLOCKS];
 __device__ inline float
 ks_block_scan(float x, uint32_t wid, uint32_t lane, uint32_t n_warps, uint32_t n_lanes, uint32_t mask);
-__device__ inline float sequential_lookback(uint32_t tid, float block_prefix_sum);
+__device__ inline float logarithmic_lookback(uint32_t tid, float block_prefix_sum);
 __device__ inline float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum);
 
 /*
@@ -54,7 +54,7 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     }
     __syncthreads();
 
-    float block_offset = sequential_lookback(tid, block_prefix_sum);
+    float block_offset = logarithmic_lookback(tid, block_prefix_sum);
 
     __shared__ float shared_block_offset;
     if (tid == 0) {
@@ -106,23 +106,31 @@ ks_block_scan(float x, uint32_t wid, uint32_t lane, uint32_t n_warps, uint32_t n
     return x + __shfl_up_sync(mask, warp_sum, 1);
 }
 
-__device__ inline float sequential_lookback(uint32_t tid, float block_prefix_sum) {
+__device__ inline float logarithmic_lookback(uint32_t tid, float block_prefix_sum) { //similar to ks addr
     float block_offset = 0.0f;
 
     if (tid == 0 && blockIdx.x > 0) {
         float accumulation = 0.0f;
+        int prev = blockIdx.x - 1;
+        int jump = 1;
+
 #pragma unroll 1
-        for (int prev = blockIdx.x - 1; prev >= 0; prev--) {
-            while (isnan(block_status[prev])) {
-                /* wait */
-            }
+        while(prev >= 0){
+            while (isnan(block_status[prev])) {}
+
+            float value = block_status[prev];
+
             if (block_status[prev] < 0.0f) {
-                accumulation -= block_status[prev];
+                accumulation -= value;
             } else {
-                accumulation += block_status[prev];
+                accumulation += value;
                 break;
             }
+
+            jump <<= 1;
+            prev -= jump;
         }
+
         block_offset = accumulation;
         block_status[blockIdx.x] = block_offset + block_prefix_sum; // prefix
         __threadfence();
