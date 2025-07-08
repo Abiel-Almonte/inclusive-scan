@@ -12,8 +12,6 @@ extern "C" {
 void compare_with_cub(float* h_input, uint32_t n, int reps);
 }
 
-constexpr uint32_t BLOCK_SIZE = 64;
-
 size_t get_alloc_size(uint32_t n_floats) {
     constexpr size_t CACHE_LINE_SIZE = 64;
     size_t bytes_needed = n_floats * sizeof(float);
