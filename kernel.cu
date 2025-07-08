@@ -2,17 +2,17 @@
 #include "config.h"
 
 __device__ float block_status[MAXBLOCKS];
-__device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint32_t lane, uint32_t active_lanes, uint32_t wid, float warp_offsets[]);
-__device__ __forceinline__ void blelloch_shmem_scan(uint32_t tid, uint32_t n_warps, float warp_sums[]);
-__device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_prefix_sum);
-__device__ __forceinline__ float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum);
-// flag << value;
+__device__ inline float ks_warp_scan(float parent, uint32_t lane, uint32_t wid, float warp_offsets[]);
+__device__ inline void ks_cross_warp_scan(uint32_t wid, uint32_t lane, float warp_sums[]);
+__device__ inline void blelloch_shmem_scan(uint32_t tid, uint32_t n_warps, float warp_sums[]);
+__device__ inline float sequential_lookback(uint32_t tid, float block_prefix_sum);
+__device__ inline float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum);
+
 
 /*
- * Single pass device wide parallel prefix sum
- *
- * Kogge-Stone warp scan
- * Blelloch block scan
+ * Single pass device wide parallel inclusive scan aligned for 32x
+ * 
+ * Kogge-Stone warp scan and cross warp scan
  * Merrill & Garland's decoupled lookback
  */
 extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
@@ -29,36 +29,26 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     uint32_t lane = tid % WARPSIZE;
     uint32_t n_warps = (bdim + WARPSIZE - 1) / WARPSIZE;
 
-    uint32_t remaining = N - blockIdx.x * bdim;
-    uint32_t active_lanes;
-
-    if (remaining > wid*WARPSIZE){
-        if(remaining >= WARPSIZE){
-            active_lanes = WARPSIZE;
-        }else{
-            active_lanes = remaining - wid*WARPSIZE;
-        }
-    }else{
-        active_lanes = 0;
+    float x = __ldg(&A[gid]);
+    
+    __shared__ float warp_sums[WARPSIZE];
+    x = ks_warp_scan(x, lane, wid, warp_sums); 
+    __syncthreads();
+    ks_cross_warp_scan(wid, lane, warp_sums);
+    
+    __syncthreads();
+    
+    if (wid > 0){
+        x +=  warp_sums[wid -1];
     }
     
-    uint32_t mask = (1u << active_lanes) - 1u;
-
-    float x = (gid < N) ? __ldg(&A[gid]) : 0.0f;
-    float original_x = x;
-    
-    extern __shared__ float warp_sums[];
-
-    x = ks_warp_scan(x, mask, lane, active_lanes, wid, warp_sums);
-    __syncthreads();
-
-    blelloch_shmem_scan(tid, n_warps, warp_sums);
-    x += warp_sums[wid];
-
     __shared__ float block_prefix_sum;
-    if (tid == bdim - 1) {
-        block_prefix_sum = x + original_x;
-        block_status[blockIdx.x] = -block_prefix_sum;
+    if (tid == 0) {
+        if (blockIdx.x == 0){
+            block_status[blockIdx.x] = block_prefix_sum;
+        }else {
+            block_status[blockIdx.x] = -block_prefix_sum;
+        }
     }
     __syncthreads();
 
@@ -70,65 +60,40 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     }
     __syncthreads();
 
-    if (gid < N) {
-        B[gid] = x + shared_block_offset;
-    }
+    B[gid] = x + shared_block_offset;
 }
 
-__device__ __forceinline__ float ks_warp_scan(float parent, uint32_t mask, uint32_t lane, uint32_t active_lanes, uint32_t wid, float warp_offsets[]) {
+__device__ inline float ks_warp_scan(float parent, uint32_t lane, uint32_t wid, float warp_offsets[]) {
 #pragma unroll 1
-    for (int delta = 1; delta < active_lanes; delta <<= 1) {
-        float child = __shfl_up_sync(mask, parent, delta);
-        if (lane >= delta && lane < active_lanes) {
+    for (int delta = 1; delta < WARPSIZE; delta <<= 1) {
+        float child = __shfl_up_sync(FULLMASK, parent, delta);
+        if (lane >= delta) {
             parent += child;
         }
     }
 
-    if (lane == active_lanes - 1){
+    if (lane == WARPSIZE - 1){
         warp_offsets[wid] = parent;
-    }
-
-    parent = __shfl_up_sync(mask, parent, 1);
-    if (lane == 0){
-        parent = 0.0f;
     }
 
     return parent;
 }
 
-__device__ __forceinline__ void blelloch_shmem_scan(uint32_t tid, uint32_t n_warps, float warp_sums[]) {
-    uint32_t tree_index = tid + 1;
-
-#pragma unroll 1
-    for (int delta = 1; delta <  n_warps ; delta <<= 1) {
-        uint32_t parent = tree_index * 2 * delta - 1;
-        if (parent < n_warps) {
-            warp_sums[parent] += warp_sums[parent - delta];
+__device__ inline void ks_cross_warp_scan(uint32_t wid, uint32_t lane, float warp_sums[]){
+    if (wid == 0){
+        float warp_sum = warp_sums[lane];
+        for (int delta = 1; delta < WARPSIZE; delta <<=1){
+            float value= __shfl_up_sync(FULLMASK, warp_sum, delta);
+            if(lane >= delta){
+                warp_sum += value;
+            }
         }
-        __syncthreads();
+        warp_sums[lane] = warp_sum;
     }
-
-    if (tid == 0) {
-        warp_sums[n_warps - 1] = 0.0f;
-    }
-    __syncthreads();
-
-#pragma unroll 1
-    for (int delta = n_warps >> 1; delta >= 1; delta >>= 1) {
-        uint32_t parent = tree_index * 2 * delta - 1;
-        if (parent < n_warps) {
-            uint32_t child = parent - delta;
-            
-            float temp = warp_sums[parent];
-            warp_sums[parent] += warp_sums[child];
-            warp_sums[child] = temp;
-        }
-        __syncthreads();
-    }
-
 }
 
-__device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_prefix_sum) {
+
+__device__ inline float sequential_lookback(uint32_t tid, float block_prefix_sum) {
     float block_offset = 0.0f;
 
     if (tid == 0 && blockIdx.x > 0) {
@@ -153,7 +118,7 @@ __device__ __forceinline__ float sequential_lookback(uint32_t tid, float block_p
     return block_offset;
 }
 
-__device__ __forceinline__ float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum){
+__device__ inline float parallel_lookback(uint32_t tid, uint32_t lane, float block_prefix_sum){
     return 0.0f;
 }
 
