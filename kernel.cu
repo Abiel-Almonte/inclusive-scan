@@ -17,18 +17,17 @@ extern "C" __global__ void single_pass_scan(float* A, float* B, uint32_t N) {
     uint32_t tid = threadIdx.x;
     uint16_t bdim = blockDim.x;
     uint32_t gid = blockIdx.x * bdim + tid;
-
+    
     if (tid == 0) {
         block_status[blockIdx.x] = NAN; // invalid
+        __threadfence();
     }
-    __syncthreads();
-
+    
     uint32_t wid = tid / WARPSIZE;
     uint32_t lane = tid % WARPSIZE;
     uint32_t n_warps = (bdim + WARPSIZE - 1) / WARPSIZE;
     uint32_t remaining = N - bdim * blockIdx.x;
     uint32_t n_lanes = (remaining >= wid*WARPSIZE)? (remaining - wid*WARPSIZE)? WARPSIZE : remaining - wid*WARPSIZE : 0u;
-
     uint32_t mask = (1u << n_lanes) - 1u;
 
     float x = (gid < N) ? __ldg(&A[gid]) : 0.0f;
