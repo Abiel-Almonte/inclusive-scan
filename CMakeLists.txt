@@ -1,27 +1,33 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.20)
+project(FastPrefixSum LANGUAGES CXX CUDA)
 
-project(hpps LANGUAGES CXX CUDA)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-enable_language(CUDA)
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 set(CMAKE_CUDA_ARCHITECTURES 89)
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math")
 
-add_executable(${PROJECT_NAME}
-    test.cpp
-    kernel.cu
-    benchmark.cu
-    config.h
+find_package(CUB REQUIRED)
+
+add_executable(benchmark benchmark.cu)
+add_executable(validate validate.cu)
+
+target_link_libraries(benchmark PRIVATE CUB::CUB)
+target_link_libraries(validate PRIVATE CUB::CUB)
+
+target_include_directories(benchmark PRIVATE 
+    "${CMAKE_CURRENT_SOURCE_DIR}" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/generated"
+    "${CMAKE_CURRENT_SOURCE_DIR}/best_kernel"
 )
 
-set_target_properties(${PROJECT_NAME} PROPERTIES
-    CXX_STANDARD 17
-    CUDA_STANDARD 17
-    CXX_STANDARD_REQUIRED ON
-)
+target_compile_definitions(benchmark PRIVATE "KERNEL_HEADER_PATH=\"${KERNEL_HEADER_FILENAME}\"")
 
-target_compile_options(${PROJECT_NAME} PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:-O3 -march=native -ffast-math>
-    $<$<COMPILE_LANGUAGE:CUDA>:-ffast-math -O3>
-)
+target_include_directories(validate PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(validate PRIVATE "KERNEL_HEADER_PATH=\"${KERNEL_HEADER_FILENAME}\"")
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set_target_properties(benchmark PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+set_target_properties(validate PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
