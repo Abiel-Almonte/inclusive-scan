@@ -1,0 +1,11 @@
+[project]
+name = "fast-prefixsum"
+version = "0.1.0"
+description = "A project to optimize CUDA prefix sum kernels."
+dependencies = [
+    "Jinja2",
+    "optuna",
+    "pandas",
+    "matplotlib",
+    "numpy",
+] 
