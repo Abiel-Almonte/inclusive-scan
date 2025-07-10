@@ -8,5 +8,8 @@ __pycache__/
 .clang-format
 
 *.sqlite3
+*.out
+*.csv
 
-visualization/
+/visualization/*.png
+/visualization/logs/
