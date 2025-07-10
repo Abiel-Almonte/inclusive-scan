@@ -9,7 +9,7 @@ High-performance CUDA implementation of an **inclusive scan** (prefix-sum) over 
 Peak throughput: **≈ 613 GB/s** (93.4 % of theoretical DRAM bandwidth) at N ≈ 256 M elements, delivering a **1.5 ×** speed-up over CUB on the test GPU.
 
 <p align="center">
-  <img src="visualization/roofline_chart.png" alt="Roofline" width="90%">
+  <img src="images/roofline_chart.png" alt="Roofline" width="90%">
 </p>
 
 ---
