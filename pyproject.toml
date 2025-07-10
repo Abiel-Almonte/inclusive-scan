@@ -5,6 +5,7 @@ description = "A project to optimize CUDA prefix sum kernels."
 dependencies = [
     "Jinja2",
     "optuna",
+    "optuna-dashboard",
     "pandas",
     "matplotlib",
     "numpy",

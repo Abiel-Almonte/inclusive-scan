@@ -6,7 +6,7 @@ __pycache__/
 .venv/
 .vscode
 .clang-format
-*.txt
-*.log
+
+*.sqlite3
 
 visualization/
