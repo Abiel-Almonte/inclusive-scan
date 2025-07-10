@@ -1,5 +1,12 @@
-build
+build/
+generated/
+__pycache__/
+*.pyc
+
+.venv/
 .vscode
 .clang-format
 *.txt
 *.log
+
+visualization/
