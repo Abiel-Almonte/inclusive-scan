@@ -3,7 +3,7 @@
 set -e
 
 usage() {
-    echo "Usage: $0 {validate|benchmark Optional(<N>)|profile Optional(<N>)} <kernel_file.cuh> [options]"
+    echo "Usage: $0 {validate|benchmark|profile} <kernel_file.cuh> Optional(<N>)"
     exit 1
 }
 
@@ -35,7 +35,7 @@ case $TARGET in
 
     profile)
         cmake --build build --target benchmark
-        sudo /usr/local/NVIDIA-Nsight-Compute/ncu --section MemoryWorkloadAnalysis --section SpeedOfLight --section PmSampling --pm-sampling-buffer-size 134217728 --pm-sampling-interval 10000 --pm-sampling-max-passes 25 --print-summary per-kernel --target-processes all ./build/benchmark "$@"
+        sudo /usr/local/NVIDIA-Nsight-Compute/ncu --log-file /dev/stdout --section MemoryWorkloadAnalysis --section SpeedOfLight --section PmSampling --pm-sampling-buffer-size 134217728 --pm-sampling-interval 10000 --pm-sampling-max-passes 25 --print-summary per-kernel --target-processes all ./build/benchmark "$@"
         ;;
 
     *)
