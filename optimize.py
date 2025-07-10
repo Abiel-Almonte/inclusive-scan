@@ -39,21 +39,15 @@ def generate_kernel(blockdim, unroll_factors, output_dir='generated', is_best: b
 def objective(trial):
     blockdim = trial.suggest_categorical('blockdim', [32, 64, 128, 256, 512, 1024])
     unroll_factors = {
-        'thread': trial.suggest_categorical('thread_unroll_factor', [1, 2, 4, 8]),
-        'load': trial.suggest_categorical('load_unroll_factor', [0, 1, 2, 4, 8]),
-        'store': trial.suggest_categorical('store_unroll_factor', [0, 1, 2, 4, 8]),
-        'serial': trial.suggest_categorical('serial_unroll_factor', [0, 1, 2, 4, 8]),
+        'thread': trial.suggest_categorical('thread_unroll_factor', [1, 2]),
+        'load': trial.suggest_categorical('load_unroll_factor', [0, 1]),
+        'store': trial.suggest_categorical('store_unroll_factor', [0, 1]),
+        'serial': trial.suggest_categorical('serial_unroll_factor', [0, 1]),
         'intra_warp': trial.suggest_categorical('intra_warp_unroll_factor', [0, 1, 4, 8, 16, 32]),
         'inter_warp': trial.suggest_categorical('inter_warp_unroll_factor', [0, 1, 4, 8, 16, 32]),
         'warp_reduce': trial.suggest_categorical('warp_reduce_unroll_factor', [0, 1, 4, 8, 16, 32]),
         'vecs_add': trial.suggest_categorical('vecs_add_unroll_factor', [0, 1, 2, 4, 8]),
     }
-
-    thread_unroll_size = unroll_factors['thread']
-    for key in ['load', 'store', 'serial', 'vecs_add']:
-        if unroll_factors[key] > thread_unroll_size:
-            raise optuna.exceptions.TrialPruned()
-
 
     output_dir = 'generated'
     try:
