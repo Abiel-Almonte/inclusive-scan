@@ -1,117 +1,132 @@
 #include <algorithm>
 #include <cmath>
-#include <cub/cub.cuh>
+#include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <numeric>
 #include <vector>
 
-#include "config.h"
+#include <cuda_runtime.h>
+#include <cub/cub.cuh>
 
-#define CHECK_CUDA(call)                                                                                     \
-    do {                                                                                                     \
-        cudaError_t _err = call;                                                                             \
-        if (_err != cudaSuccess) {                                                                           \
-            std::cerr << "CUDA error: " << cudaGetErrorString(_err) << " at " << __FILE__ << ":" << __LINE__ \
-                      << std::endl;                                                                          \
-            exit(1);                                                                                         \
-        }                                                                                                    \
-    } while (0)
+#include KERNEL_HEADER_PATH
 
-extern "C" {
+#define VEC_SIZE 4
 
-__global__ void single_pass_scan(float* A, float* B, uint32_t N);
-
-void compare_with_cub(float* h_input, uint32_t n, int reps) {
-    size_t bytes = n * sizeof(float);
-
-    float *d_input, *d_output_mine, *d_output_cub;
-    CHECK_CUDA(cudaMalloc(&d_input, bytes));
-    CHECK_CUDA(cudaMalloc(&d_output_mine, bytes));
-    CHECK_CUDA(cudaMalloc(&d_output_cub, bytes));
-    CHECK_CUDA(cudaMemcpy(d_input, h_input, bytes, cudaMemcpyHostToDevice));
-
-    size_t temp_storage_bytes = 0;
-    cub::DeviceScan::ExclusiveSum(nullptr, temp_storage_bytes, d_input, d_output_cub, n);
-    void* d_temp_storage = nullptr;
-    CHECK_CUDA(cudaMalloc(&d_temp_storage, temp_storage_bytes));
-
-    cudaEvent_t start, stop;
-    CHECK_CUDA(cudaEventCreate(&start));
-    CHECK_CUDA(cudaEventCreate(&stop));
-
-    std::vector<float> times_mine, times_cub;
-    uint32_t N_BLOCKS = (n + BLOCKDIM - 1) / BLOCKDIM;
-    size_t num_warps = (BLOCKDIM + 32 - 1) / 32;
-    size_t SHMEM_BYTES = num_warps * sizeof(float);
-
-    for (int i = 0; i < reps; i++) {
-        CHECK_CUDA(cudaEventRecord(start));
-        single_pass_scan<<<N_BLOCKS, BLOCKDIM, SHMEM_BYTES>>>(d_input, d_output_mine, n);
-        CHECK_CUDA(cudaGetLastError());
-        CHECK_CUDA(cudaEventRecord(stop));
-        CHECK_CUDA(cudaEventSynchronize(stop));
-        float elapsed;
-        CHECK_CUDA(cudaEventElapsedTime(&elapsed, start, stop));
-        times_mine.push_back(elapsed);
+void checkCudaErrors(cudaError_t err) {
+    if (err != cudaSuccess) {
+        fprintf(stderr, "CUDA Error: %s\n", cudaGetErrorString(err));
+        exit(-1);
     }
+}
 
-    for (int i = 0; i < reps; i++) {
-        CHECK_CUDA(cudaEventRecord(start));
-        cub::DeviceScan::InclusiveSum(d_temp_storage, temp_storage_bytes, d_input, d_output_cub, n);
-        CHECK_CUDA(cudaEventRecord(stop));
-        CHECK_CUDA(cudaEventSynchronize(stop));
-        float elapsed;
-        CHECK_CUDA(cudaEventElapsedTime(&elapsed, start, stop));
-        times_cub.push_back(elapsed);
-    }
-
-    std::sort(times_mine.begin(), times_mine.end());
-    std::sort(times_cub.begin(), times_cub.end());
-    float median_mine = times_mine[reps / 2];
-    float median_cub = times_cub[reps / 2];
-
-    std::cout << "\n=== Performance Comparison (n=" << n << ") ===" << std::endl;
-
-    std::cout << "Your implementation:\n";
-    std::cout << "  Array size: " << n << " elements\n";
-    std::cout << "  Median time: " << median_mine << " ms\n";
-    std::cout << "  Throughput: " << (n / median_mine / 1e6) << " billion elements/sec\n";
-    std::cout << "  Bandwidth: " << (2 * bytes / median_mine / 1e6) << " GB/s\n";
-
-    std::cout << "CUB implementation:\n";
-    std::cout << "  Array size: " << n << " elements\n";
-    std::cout << "  Median time: " << median_cub << " ms\n";
-    std::cout << "  Throughput: " << (n / median_cub / 1e6) << " billion elements/sec\n";
-    std::cout << "  Bandwidth: " << (2 * bytes / median_cub / 1e6) << " GB/s\n";
-
-    std::cout << "Ratio (yours/CUB): " << median_mine / median_cub << "x\n";
-
-    std::vector<float> h_mine(n), h_cub(n);
-    CHECK_CUDA(cudaMemcpy(h_mine.data(), d_output_mine, bytes, cudaMemcpyDeviceToHost));
-    CHECK_CUDA(cudaMemcpy(h_cub.data(), d_output_cub, bytes, cudaMemcpyDeviceToHost));
-
-    bool match = true;
-    float abs_tol = 1e-3f;
-    float rel_tol = 1e-6f;
-    for (size_t i = 0; i < n; ++i) {
-        float diff = std::abs(h_mine[i] - h_cub[i]);
-        float max_val = std::max(std::abs(h_mine[i]), std::abs(h_cub[i]));
-        if (diff > abs_tol && diff > rel_tol * max_val) {
-            std::cout << "Mismatch at " << i << ": " << h_mine[i] << " vs " << h_cub[i] << " (diff: " << diff << ")"
-                      << std::endl;
-            match = false;
+bool validate(const std::vector<float>& our_result, const std::vector<float>& cub_result, int n, float& max_rel_err) {
+    max_rel_err = 0.0f;
+    bool passed = true;
+    for (int i = 0; i < n; ++i) {
+        float ref = cub_result[i];
+        float res = our_result[i];
+        float rel_err = (ref != 0) ? fabsf((res - ref) / ref) : fabsf(res - ref);
+        if (rel_err > 1e-5f) {
+            max_rel_err = rel_err;
+            passed = false;
         }
     }
-    if (match)
-        std::cout << "\nResults match CUB" << std::endl;
-    else
-        std::cout << "Mismatch found!\n";
-
-    CHECK_CUDA(cudaFree(d_input));
-    CHECK_CUDA(cudaFree(d_output_mine));
-    CHECK_CUDA(cudaFree(d_output_cub));
-    CHECK_CUDA(cudaFree(d_temp_storage));
-    CHECK_CUDA(cudaEventDestroy(start));
-    CHECK_CUDA(cudaEventDestroy(stop));
+    return passed;
 }
+
+int main(int argc, char** argv) {
+    int N;
+    if (argc > 1) {
+        N = atoi(argv[1]);
+    } else {
+        N = 1 << 28;
+    }
+
+    std::cout << "Benchmarking for N = " << N << std::endl;
+
+    const int N_vec = (N + VEC_SIZE - 1) / VEC_SIZE;
+    const size_t n_bytes = (size_t) N * sizeof(float);
+
+    std::vector<float> h_A(N);
+    for (int i = 0; i < N; ++i)
+        h_A[i] = (rand() % 100) / 100.0f;
+
+    float *d_A, *d_B;
+    checkCudaErrors(cudaMalloc((void**) &d_A, n_bytes));
+    checkCudaErrors(cudaMalloc((void**) &d_B, n_bytes));
+    checkCudaErrors(cudaMemcpy(d_A, h_A.data(), n_bytes, cudaMemcpyHostToDevice));
+
+    uint32_t gridDim = (N_vec + BLOCKDIM - 1) / BLOCKDIM;
+    unsigned long long* d_temp_storage_mine;
+    checkCudaErrors(cudaMalloc((void**) &d_temp_storage_mine, gridDim * sizeof(unsigned long long)));
+    checkCudaErrors(cudaMemset(d_temp_storage_mine, 0, gridDim * sizeof(unsigned long long)));
+
+    cudaEvent_t start, stop;
+    checkCudaErrors(cudaEventCreate(&start));
+    checkCudaErrors(cudaEventCreate(&stop));
+
+    // Warm-up run
+    single_pass_scan_4x<<<gridDim, BLOCKDIM>>>((const float4*) d_A, (float4*) d_B, d_temp_storage_mine, N_vec);
+
+    std::vector<float> timings;
+    for (int i = 0; i < 101; ++i) {
+        checkCudaErrors(cudaEventRecord(start));
+        single_pass_scan_4x<<<gridDim, BLOCKDIM>>>((const float4*) d_A, (float4*) d_B, d_temp_storage_mine, N_vec);
+        checkCudaErrors(cudaEventRecord(stop));
+        checkCudaErrors(cudaEventSynchronize(stop));
+        float ms;
+        checkCudaErrors(cudaEventElapsedTime(&ms, start, stop));
+        timings.push_back(ms);
+    }
+    std::sort(timings.begin(), timings.end());
+    double median_ms = timings[timings.size() / 2];
+
+    double bandwidth = (double) n_bytes * 2 / (median_ms / 1000.0) / 1e9;
+    std::cout << "My Kernel Performance: " << bandwidth << " GB/s" << std::endl;
+
+    std::vector<float> h_B(N);
+    std::vector<float> h_B_cub(N);
+    checkCudaErrors(cudaMemcpy(h_B.data(), d_B, n_bytes, cudaMemcpyDeviceToHost));
+
+    void* d_temp_storage_cub = nullptr;
+    size_t temp_storage_bytes = 0;
+    cub::DeviceScan::InclusiveSum(d_temp_storage_cub, temp_storage_bytes, d_A, d_B, N);
+    checkCudaErrors(cudaMalloc(&d_temp_storage_cub, temp_storage_bytes));
+
+    cub::DeviceScan::InclusiveSum(d_temp_storage_cub, temp_storage_bytes, d_A, d_B, N);
+
+    timings.clear();
+    for (int i = 0; i < 101; ++i) {
+        checkCudaErrors(cudaEventRecord(start));
+        cub::DeviceScan::InclusiveSum(d_temp_storage_cub, temp_storage_bytes, d_A, d_B, N);
+        checkCudaErrors(cudaEventRecord(stop));
+        checkCudaErrors(cudaEventSynchronize(stop));
+        float ms;
+        checkCudaErrors(cudaEventElapsedTime(&ms, start, stop));
+        timings.push_back(ms);
+    }
+    std::sort(timings.begin(), timings.end());
+    median_ms = timings[timings.size() / 2];
+
+    double cub_bandwidth = (double) n_bytes * 2 / (median_ms / 1000.0) / 1e9;
+    checkCudaErrors(cudaMemcpy(h_B_cub.data(), d_B, n_bytes, cudaMemcpyDeviceToHost));
+    std::cout << "CUB Kernel Performance: " << cub_bandwidth << " GB/s" << std::endl;
+
+    float max_rel_err;
+    bool passed = validate(h_B, h_B_cub, N, max_rel_err);
+    if (passed) {
+        std::cout << "Validation: [PASS]" << std::endl;
+    } else {
+        std::cout << "Validation: [FAIL] (Max Rel Err: " << std::scientific << max_rel_err << ")" << std::endl;
+    }
+
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_temp_storage_mine);
+    cudaFree(d_temp_storage_cub);
+
+    return 0;
 }
