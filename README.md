@@ -9,11 +9,7 @@ High-performance CUDA implementation of an **inclusive scan** (prefix-sum) over 
 Peak throughput: **≈ 613 GB/s** (93.4 % of theoretical DRAM bandwidth) at N ≈ 256 M elements, delivering a **1.5 ×** speed-up over CUB on the test GPU.
 
 <p align="center">
-  <img src="visualization/performance_chart.png" alt="Performance" width="70%">
-</p>
-
-<p align="center">
-  <img src="visualization/roofline_chart.png" alt="Roofline" width="70%">
+  <img src="visualization/roofline_chart.png" alt="Roofline" width="90%">
 </p>
 
 ---
@@ -42,7 +38,7 @@ During profiling we treat CUB’s two internal kernels — `DeviceScanInitKernel
 2. **Metrics scraped:**
    * Memory Throughput (GByte/s)
    * DRAM Throughput (%) – “roofline” efficiency
-   * Duration (µs / ms) → converted to seconds for weighting
+   * Duration (µs / ms) - converted to seconds for weighting
 3. **Problem sizes:** powers of two from 2^10 to 2^28 plus ±1 neighbours to observe cache edge performance.
 
 ---
