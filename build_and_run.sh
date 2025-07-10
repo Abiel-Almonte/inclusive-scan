@@ -35,7 +35,7 @@ case $TARGET in
 
     profile)
         cmake --build build --target benchmark
-        sudo /usr/local/NVIDIA-Nsight-Compute/ncu --section SpeedOfLight --print-summary per-kernel --target-processes all ./build/benchmark "$@"
+        sudo /usr/local/NVIDIA-Nsight-Compute/ncu --section MemoryWorkloadAnalysis --section SpeedOfLight --section PmSampling --pm-sampling-buffer-size 134217728 --pm-sampling-interval 10000 --pm-sampling-max-passes 25 --print-summary per-kernel --target-processes all ./build/benchmark "$@"
         ;;
 
     *)
