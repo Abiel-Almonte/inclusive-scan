@@ -47,16 +47,11 @@ During profiling we treat CUB’s two internal kernels — `DeviceScanInitKernel
 
 ---
 
-## 5. Reproducing the Benchmark
+## 5. Correctness Validation
 
-```bash
-# CUDA 12.x, Nsight Compute 2024+, Python 3.10 with matplotlib & pandas
+Ran `validate.cu` to exhaustively compare every output
+against NVIDIA CUB on a sweep of edge-case vector sizes (0 ... 1 M+):
 
-# 1. Build & profile all sizes
-python visualization/visualize_benchmark.py
-
-# 2. Plot only (reuse previous CSV)
-python visualization/visualize_benchmark.py --plot-only
-```
+---
 
 Environment-specific tuning (SM clock, power limits) was **disabled** to publish vendor-neutral numbers.
