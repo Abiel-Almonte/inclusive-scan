@@ -1,4 +1,4 @@
-# Device-Wide Prefix Sum
+# GPU-Wide Prefix Sum
 
 High-performance CUDA implementation of an **inclusive scan** over large inputs.  A single, fused kernel `single_pass_scan_4x` reaches DRAM throughput on an RTX 4070 Ti SUPER comparable to copy bandwidth and outperforms NVIDIA CUB’s production `DeviceScan::InclusiveSum` by **up to 1.5 ×**.
 
@@ -8,7 +8,7 @@ High-performance CUDA implementation of an **inclusive scan** over large inputs.
   <img src="images/roofline_chart.png" alt="Roofline" width="100%">
 </p>
 
-Peak throughput: **~ 613 GB/s** (93.4 % of theoretical DRAM bandwidth) at 256 M elements.  
+Peak throughput: **613 GB/s** (93.4 % of theoretical DRAM bandwidth) at 256 M elements.  
  Up to a **1.5 ×** speed-up over CUB on mid problem sizes.
 
 ---
