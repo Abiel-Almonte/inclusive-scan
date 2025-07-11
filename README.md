@@ -13,7 +13,7 @@ High-performance CUDA implementation of an inclusive scan over large inputs.  A 
 </p>
 
 **Key highlights:**  
-- **Peak throughput:** 613 GB/s (93.4 % of theoretical DRAM bandwidth) at 256 M elements  
+- **Peak throughput:** 613 GB/s (**93.4 %** of theoretical DRAM bandwidth) at 256 M elements  
 - **Mid-range speed-up:** Up to 1.5× over NVIDIA CUB
 
 ---
