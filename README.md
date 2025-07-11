@@ -30,7 +30,7 @@ High-performance CUDA implementation of an inclusive scan over large inputs.  A 
 
 ## Baseline Competitor
 
-[NVIDIA CUB](https://nvidia.github.io/cub/) v2.x `cub::DeviceScan::InclusiveSum` (the standard for GPU prefix-scans).
+[NVIDIA CUB](https://nvidia.github.io/cccl/cub/api/structcub_1_1DeviceScan.html#_CPPv4I00EN3cub10DeviceScan12InclusiveSumE11cudaError_tPvR6size_t9IteratorT9NumItemsT12cudaStream_t) v2.x `cub::DeviceScan::InclusiveSum` (the standard for GPU prefix-scans).
 
 During profiling we treat CUB’s two internal kernels (`DeviceScanInitKernel`, `DeviceScanKernel`) as a single logical operation and time-weight their metrics for a fair comparison.
 
