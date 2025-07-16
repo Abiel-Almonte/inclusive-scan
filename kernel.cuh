@@ -89,9 +89,9 @@ __device__ float ks_block_scan_4x(float4& vec, uint32_t wid, uint32_t lane, uint
         }
     }
 
-    float last_warp_offset = __shfl_up_sync(FULLMASK, thread_sum, 1);
+    float lane_offset = __shfl_up_sync(FULLMASK, thread_sum, 1);
     if (lane == 0){
-        last_warp_offset = 0.0f;
+        lane_offset = 0.0f;
     }
 
     if (lane == WARPSIZE - 1) {
@@ -114,8 +114,17 @@ __device__ float ks_block_scan_4x(float4& vec, uint32_t wid, uint32_t lane, uint
         }
     }
     __syncthreads();
-    float rest_warp_offset = (wid > 0) ? warp_sums[wid - 1] : 0.0f;
-    vec = float4_add(rest_warp_offset +  last_warp_offset, vec);
+
+    float total_offset = 0.0f;
+    if (lane > 0) {
+        total_offset += lane_offset;
+    }
+
+    if (wid > 0) {
+        total_offset += warp_sums[wid - 1];//warp offset
+    }
+
+    vec = float4_add(total_offset, vec);
     return warp_sums[n_warps - 1];
 }
 
