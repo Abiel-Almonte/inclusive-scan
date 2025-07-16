@@ -18,15 +18,15 @@
 
 __device__ float ks_block_scan_4x(float4& vec, uint32_t wid, uint32_t lane, uint32_t n_warps);
 
-__device__ void parallel_lookback(volatile unsigned long long* temp_storage, float* shared_prefix_sum);
+__device__ void parallel_lookback(volatile uint64_t* temp_storage, float* shared_prefix_sum);
 __device__ __forceinline__ float warp_reduce_sum(float val);
-__device__ __forceinline__ unsigned long long pack_status(int flag, float sum);
-__device__ __forceinline__ void unpack_status(unsigned long long status, int& flag, float& sum);
+__device__ __forceinline__ uint64_t pack_status(uint32_t flag, float sum);
+__device__ __forceinline__ void unpack_status(uint64_t status, uint32_t& flag, float& sum);
 __device__ __forceinline__ float4 float4_add(float s, float4 v);
 
 
 
-extern "C" __global__ void single_pass_scan_4x(const float4* A, float4* B, volatile unsigned long long* temp_storage, uint32_t N_vec) {
+extern "C" __global__ void single_pass_scan_4x(const float4* A, float4* B, volatile uint64_t* temp_storage, uint32_t N_vec) {
     __shared__ float shared_prefix_sum;
 
     const uint32_t tid = threadIdx.x;
@@ -37,20 +37,19 @@ extern "C" __global__ void single_pass_scan_4x(const float4* A, float4* B, volat
 
     if (tid == 0) {
         shared_prefix_sum = 0.0f;
+        temp_storage[blockIdx.x] = pack_status(INVALID, 0.0f);
+        __threadfence();
     }
-    __syncthreads();
 
     float4 x = (gid < N_vec) ? A[gid] : make_float4(0.0f, 0.0f, 0.0f, 0.0f);
     float block_sum = ks_block_scan_4x(x, wid, lane, n_warps);
-    __syncthreads();
 
     if (tid == 0) {
-        int status = (blockIdx.x == 0) ? PREFIX : AGGREGATE;
-        temp_storage[blockIdx.x] = pack_status(status, block_sum);
+        uint32_t flag = (blockIdx.x == 0) ? PREFIX : AGGREGATE;
+        temp_storage[blockIdx.x] = pack_status(flag, block_sum);
+        __threadfence();
     }
 
-    __threadfence();
-    __syncthreads();
 
     if (blockIdx.x > 0) {
         if (wid == 0) {
@@ -83,26 +82,28 @@ __device__ float ks_block_scan_4x(float4& vec, uint32_t wid, uint32_t lane, uint
     float thread_sum = vec.w;
 
 #pragma unroll 4
-    for (int delta = 1; delta < WARPSIZE; delta <<= 1) {
+    for (uint32_t delta = 1; delta < WARPSIZE; delta <<= 1) {
         float neighbor_sum = __shfl_up_sync(FULLMASK, thread_sum, delta);
         if (lane >= delta) {
             thread_sum += neighbor_sum;
         }
     }
 
-    float last_warp_offset = __shfl_up_sync(FULLMASK, thread_sum, 1, WARPSIZE);
-    if (lane == 0)
-        last_warp_offset = 0.0f;
-    vec = float4_add(last_warp_offset, vec);
+    float lane_offset = __shfl_up_sync(FULLMASK, thread_sum, 1);
+    if (lane == 0){
+        lane_offset = 0.0f;
+    }
+
     if (lane == WARPSIZE - 1) {
         warp_sums[wid] = thread_sum;
     }
+
     __syncthreads();
     if (wid == 0) {
         float warp_sum = (lane < n_warps) ? warp_sums[lane] : 0.0f;
 
 #pragma unroll 32
-        for (int delta = 1; delta < n_warps; delta <<= 1) {
+        for (uint32_t delta = 1; delta < n_warps; delta <<= 1) {
             float neighbor_warp_sum = __shfl_up_sync(FULLMASK, warp_sum, delta);
             if (lane >= delta) {
                 warp_sum += neighbor_warp_sum;
@@ -113,26 +114,35 @@ __device__ float ks_block_scan_4x(float4& vec, uint32_t wid, uint32_t lane, uint
         }
     }
     __syncthreads();
-    float rest_warp_offset = (wid > 0) ? warp_sums[wid - 1] : 0.0f;
-    vec = float4_add(rest_warp_offset, vec);
+
+    float total_offset = 0.0f;
+    if (lane > 0) {
+        total_offset += lane_offset;
+    }
+
+    if (wid > 0) {
+        total_offset += warp_sums[wid - 1];//warp offset
+    }
+
+    vec = float4_add(total_offset, vec);
     return warp_sums[n_warps - 1];
 }
 
 
 
 
-__device__ void parallel_lookback(volatile unsigned long long* temp_storage, float* shared_prefix_sum) {
+__device__ void parallel_lookback(volatile uint64_t* temp_storage, float* shared_prefix_sum) {
     const uint32_t lane = threadIdx.x;
     float prefix = 0.0f;
     int base = blockIdx.x - 1;
 
     while (base >= 0) {
         int prev = base - lane;
-        unsigned long long p = (prev >= 0) ? temp_storage[prev] : pack_status(PREFIX, 0.0f);
+        uint64_t status = (prev >= 0) ? temp_storage[prev] : pack_status(PREFIX, 0.0f);
 
         float prev_sum;
-        int prev_flag;
-        unpack_status(p, prev_flag, prev_sum);
+        uint32_t prev_flag;
+        unpack_status(status, prev_flag, prev_sum);
 
         uint32_t ready_ballot = __ballot_sync(FULLMASK, prev_flag != INVALID || prev < 0);
         if (ready_ballot != FULLMASK) {
@@ -173,19 +183,19 @@ __device__ void parallel_lookback(volatile unsigned long long* temp_storage, flo
     }
 }
 
-__device__ __forceinline__ unsigned long long pack_status(int flag, float sum) {
-    unsigned int sum_bits = __float_as_uint(sum);
-    return ((unsigned long long) flag << 32) | sum_bits;
+__device__ __forceinline__ uint64_t pack_status(uint32_t flag, float sum) {
+    uint32_t sum_bits = __float_as_uint(sum);
+    return ((uint64_t) flag << 32) | sum_bits;
 }
 
-__device__ __forceinline__ void unpack_status(unsigned long long status, int& flag, float& sum) {
-    flag = (int) (status >> 32);
-    sum = __uint_as_float((unsigned int) status);
+__device__ __forceinline__ void unpack_status(uint64_t status, uint32_t& flag, float& sum) {
+    flag = (uint32_t) (status >> 32);
+    sum = __uint_as_float((uint32_t) status);
 }
 
 __device__ __forceinline__ float warp_reduce_sum(float val) {
 #pragma unroll
-    for (int delta = WARPSIZE / 2; delta > 0; delta /= 2) {
+    for (uint32_t delta = WARPSIZE / 2; delta > 0; delta /= 2) {
         val += __shfl_down_sync(FULLMASK, val, delta);
     }
     return val;
