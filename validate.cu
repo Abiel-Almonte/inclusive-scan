@@ -63,9 +63,9 @@ bool run_test(int N) {
     uint32_t N_vec = (N + VEC_SIZE - 1) / VEC_SIZE;
     uint32_t gridDim = (N_vec + BLOCKDIM - 1) / BLOCKDIM;
 
-    unsigned long long* d_payload;
-    checkCudaErrors(cudaMalloc((void**) &d_payload, gridDim * sizeof(unsigned long long)));
-    checkCudaErrors(cudaMemset(d_payload, 0, gridDim * sizeof(unsigned long long)));
+    uint64_t* d_payload;
+    checkCudaErrors(cudaMalloc((void**) &d_payload, gridDim * sizeof(uint64_t)));
+    checkCudaErrors(cudaMemset(d_payload, 0, gridDim * sizeof(uint64_t)));
 
     single_pass_scan_4x<<<gridDim, BLOCKDIM>>>((const float4*) d_A, (float4*) d_B, d_payload, N_vec);
     checkCudaErrors(cudaGetLastError());

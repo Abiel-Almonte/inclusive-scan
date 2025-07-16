@@ -58,9 +58,9 @@ int main(int argc, char** argv) {
     checkCudaErrors(cudaMemcpy(d_A, h_A.data(), n_bytes, cudaMemcpyHostToDevice));
 
     uint32_t gridDim = (N_vec + BLOCKDIM - 1) / BLOCKDIM;
-    unsigned long long* d_temp_storage_mine;
-    checkCudaErrors(cudaMalloc((void**) &d_temp_storage_mine, gridDim * sizeof(unsigned long long)));
-    checkCudaErrors(cudaMemset(d_temp_storage_mine, 0, gridDim * sizeof(unsigned long long)));
+    uint64_t* d_temp_storage_mine;
+    checkCudaErrors(cudaMalloc((void**) &d_temp_storage_mine, gridDim * sizeof(uint64_t)));
+    checkCudaErrors(cudaMemset(d_temp_storage_mine, 0, gridDim * sizeof(uint64_t)));
 
     cudaEvent_t start, stop;
     checkCudaErrors(cudaEventCreate(&start));
