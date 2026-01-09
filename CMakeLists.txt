@@ -10,13 +10,8 @@ set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_ARCHITECTURES 89)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3 --use_fast_math")
 
-find_package(CUB REQUIRED)
-
 add_executable(benchmark benchmark.cu)
 add_executable(validate validate.cu)
-
-target_link_libraries(benchmark PRIVATE CUB::CUB)
-target_link_libraries(validate PRIVATE CUB::CUB)
 
 target_include_directories(benchmark PRIVATE 
     "${CMAKE_CURRENT_SOURCE_DIR}" 
