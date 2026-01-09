@@ -17,4 +17,4 @@ Reviewed by [Georgii Evtushenko (NVIDIA)](https://github.com/gevtushenko).
 
 **Resources:**  
 [Single-pass Parallel Prefix (NVIDIA Research)](https://research.nvidia.com/sites/default/files/pubs/2016-03_Single-pass-Parallel-Prefix/nvr-2016-002.pdf)  
-[Scan at the Speed of Light (GPU Mode)](https://youtu.be/VLdm3bV4bKo?si=VuQHjQEZw8MF_Jrw)
+[Scan at the Speed of Light (GPU MODE)](https://youtu.be/VLdm3bV4bKo?si=VuQHjQEZw8MF_Jrw)
