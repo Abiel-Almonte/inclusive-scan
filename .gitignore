@@ -11,5 +11,10 @@ __pycache__/
 *.out
 *.csv
 
-/visualization/*.png
-/visualization/logs/
+# Python tooling
+optimize.py
+pyproject.toml
+uv.lock
+kernel_template.cu.j2
+kernel_best.cuh
+visualization/
