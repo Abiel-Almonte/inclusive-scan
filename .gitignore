@@ -12,9 +12,7 @@ __pycache__/
 *.csv
 
 # Python tooling
-optimize.py
 pyproject.toml
 uv.lock
-kernel_template.cu.j2
 kernel_best.cuh
 visualization/
