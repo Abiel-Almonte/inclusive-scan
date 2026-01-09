@@ -20,7 +20,7 @@ if [[ ! -f "$KERNEL_FILE" || "$KERNEL_FILE" != *.cuh ]]; then
     usage
 fi
 
-cmake -S . -B build -DKERNEL_HEADER_FILENAME="$KERNEL_FILE"
+CUDA_PATH=/usr/local/cuda cmake -S . -B build -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc -DKERNEL_HEADER_FILENAME="$KERNEL_FILE"
 
 case $TARGET in
     validate)
@@ -35,7 +35,7 @@ case $TARGET in
 
     profile)
         cmake --build build --target benchmark
-        sudo /usr/local/NVIDIA-Nsight-Compute/ncu --log-file /dev/stdout --section MemoryWorkloadAnalysis --section SpeedOfLight --section PmSampling --pm-sampling-buffer-size 134217728 --pm-sampling-interval 10000 --pm-sampling-max-passes 25 --print-summary per-kernel --target-processes all ./build/benchmark "$@"
+        sudo /opt/nvidia/nsight-compute/2025.1.1/ncu --log-file /dev/stdout --section MemoryWorkloadAnalysis --section SpeedOfLight --section PmSampling --print-summary per-kernel --target-processes all ./build/benchmark "$@"
         ;;
 
     *)
