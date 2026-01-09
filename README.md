@@ -1,8 +1,8 @@
-`inclusive-scan` - GPU prefix sum that hits the roof.
+`inclusive-scan` **- GPU prefix sum that hits the roof.**
 
-1.5x faster than NVIDIA CUB. 93.8% of theoretical DRAM bandwidth.
+Faster than NVIDIA CUB at mid-problem sizes. 93.8% of theoretical DRAM bandwidth.
 
-![roofline](images/roofline_chart.png)
+![roofline](images/efficiency_bar_chart.png)
 
 Single-pass fused kernel. Kogge-Stone scan. Decoupled lookback.
 
