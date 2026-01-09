@@ -72,6 +72,7 @@ int main(int argc, char** argv) {
     std::vector<float> timings;
     for (int i = 0; i < 101; ++i) {
         checkCudaErrors(cudaEventRecord(start));
+        checkCudaErrors(cudaMemset(d_temp_storage_mine, 0, gridDim * sizeof(uint64_t)));
         single_pass_scan_4x<<<gridDim, BLOCKDIM>>>((const float4*) d_A, (float4*) d_B, d_temp_storage_mine, N_vec);
         checkCudaErrors(cudaEventRecord(stop));
         checkCudaErrors(cudaEventSynchronize(stop));
